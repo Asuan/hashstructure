@@ -1,3 +1,3 @@
-module github.com/mitchellh/hashstructure/v2
+module github.com/asuan/hashstructure
 
-go 1.14
+go 1.20

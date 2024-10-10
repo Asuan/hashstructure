@@ -14,9 +14,12 @@ func (ens *ErrNotStringer) Error() string {
 	return fmt.Sprintf("hashstructure: %s has hash:\"string\" set, but does not implement fmt.Stringer", ens.Field)
 }
 
-// ErrFormat is returned when an invalid format is given to the Hash function.
-type ErrFormat struct{}
+// ErrUnsupportedKind is returned than find unsupported filed kind
+type ErrUnsupportedKind struct {
+	Kind string
+}
 
-func (*ErrFormat) Error() string {
-	return "format must be one of the defined Format values in the hashstructure library"
+// Error implements error for ErrUnsupportedKind
+func (eut *ErrUnsupportedKind) Error() string {
+	return fmt.Sprintf("hashstructure:  unsupported kind %s", eut.Kind)
 }

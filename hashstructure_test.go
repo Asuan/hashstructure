@@ -1,15 +1,16 @@
 package hashstructure
 
 import (
+	"encoding/json"
 	"fmt"
+	"hash/fnv"
 	"strings"
 	"testing"
 	"time"
 )
 
-var testFormat = FormatV2
-
 func TestHash_identity(t *testing.T) {
+	t.Parallel()
 	cases := []interface{}{
 		nil,
 		"foo",
@@ -18,6 +19,7 @@ func TestHash_identity(t *testing.T) {
 		false,
 		[]string{"foo", "bar"},
 		[]interface{}{1, nil, "foo"},
+		[3]string{"aa", "bb", "cc"},
 		map[string]string{"foo": "bar"},
 		map[interface{}]string{"foo": "bar"},
 		map[interface{}]interface{}{"foo": "bar", "bar": 0},
@@ -35,6 +37,12 @@ func TestHash_identity(t *testing.T) {
 			Foo: "foo",
 			Bar: []interface{}{nil, nil, nil},
 		},
+		int8(1),
+		uint8(2),
+		float64(123.44),
+		[]byte("aaa"),
+		[6]int8{1, 2, 3, 4, 5, 6},
+		json.RawMessage("nil"),
 	}
 
 	for _, tc := range cases {
@@ -42,7 +50,7 @@ func TestHash_identity(t *testing.T) {
 		// in the runtime in terms of ordering.
 		valuelist := make([]uint64, 100)
 		for i := range valuelist {
-			v, err := Hash(tc, testFormat, nil)
+			v, err := Hash(tc, nil)
 			if err != nil {
 				t.Fatalf("Error: %s\n\n%#v", err, tc)
 			}
@@ -66,6 +74,7 @@ func TestHash_identity(t *testing.T) {
 }
 
 func TestHash_equal(t *testing.T) {
+	t.Parallel()
 	type testFoo struct{ Name string }
 	type testBar struct{ Name string }
 
@@ -104,7 +113,6 @@ func TestHash_equal(t *testing.T) {
 			struct{ Fname, Lname string }{"bar", "foo"},
 			false,
 		},
-
 		{
 			testFoo{"foo"},
 			testBar{"foo"},
@@ -115,6 +123,7 @@ func TestHash_equal(t *testing.T) {
 			struct {
 				Foo        string
 				unexported string
+				_          string
 			}{
 				Foo:        "bar",
 				unexported: "baz",
@@ -171,13 +180,13 @@ func TestHash_equal(t *testing.T) {
 	for i, tc := range cases {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 			t.Logf("Hashing: %#v", tc.One)
-			one, err := Hash(tc.One, testFormat, nil)
+			one, err := Hash(tc.One, nil)
 			t.Logf("Result: %d", one)
 			if err != nil {
 				t.Fatalf("Failed to hash %#v: %s", tc.One, err)
 			}
 			t.Logf("Hashing: %#v", tc.Two)
-			two, err := Hash(tc.Two, testFormat, nil)
+			two, err := Hash(tc.Two, nil)
 			t.Logf("Result: %d", two)
 			if err != nil {
 				t.Fatalf("Failed to hash %#v: %s", tc.Two, err)
@@ -197,6 +206,7 @@ func TestHash_equal(t *testing.T) {
 }
 
 func TestHash_equalIgnore(t *testing.T) {
+	t.Parallel()
 	type Test1 struct {
 		Name string
 		UUID string `hash:"ignore"`
@@ -270,11 +280,11 @@ func TestHash_equalIgnore(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		one, err := Hash(tc.One, testFormat, nil)
+		one, err := Hash(tc.One, nil)
 		if err != nil {
 			t.Fatalf("Failed to hash %#v: %s", tc.One, err)
 		}
-		two, err := Hash(tc.Two, testFormat, nil)
+		two, err := Hash(tc.Two, nil)
 		if err != nil {
 			t.Fatalf("Failed to hash %#v: %s", tc.Two, err)
 		}
@@ -292,6 +302,7 @@ func TestHash_equalIgnore(t *testing.T) {
 }
 
 func TestHash_stringTagError(t *testing.T) {
+	t.Parallel()
 	type Test1 struct {
 		Name        string
 		BrokenField string `hash:"string"`
@@ -326,7 +337,7 @@ func TestHash_stringTagError(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		_, err := Hash(tc.Test, testFormat, nil)
+		_, err := Hash(tc.Test, nil)
 		if err != nil {
 			if ens, ok := err.(*ErrNotStringer); ok {
 				if ens.Field != tc.Field {
@@ -340,6 +351,7 @@ func TestHash_stringTagError(t *testing.T) {
 }
 
 func TestHash_equalNil(t *testing.T) {
+	t.Parallel()
 	type Test struct {
 		Str   *string
 		Int   *int
@@ -399,11 +411,11 @@ func TestHash_equalNil(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		one, err := Hash(tc.One, testFormat, &HashOptions{ZeroNil: tc.ZeroNil})
+		one, err := Hash(tc.One, &HashOptions{ZeroNil: tc.ZeroNil})
 		if err != nil {
 			t.Fatalf("Failed to hash %#v: %s", tc.One, err)
 		}
-		two, err := Hash(tc.Two, testFormat, &HashOptions{ZeroNil: tc.ZeroNil})
+		two, err := Hash(tc.Two, &HashOptions{ZeroNil: tc.ZeroNil})
 		if err != nil {
 			t.Fatalf("Failed to hash %#v: %s", tc.Two, err)
 		}
@@ -421,6 +433,7 @@ func TestHash_equalNil(t *testing.T) {
 }
 
 func TestHash_equalSet(t *testing.T) {
+	t.Parallel()
 	type Test struct {
 		Name    string
 		Friends []string `hash:"set"`
@@ -444,11 +457,11 @@ func TestHash_equalSet(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		one, err := Hash(tc.One, testFormat, nil)
+		one, err := Hash(tc.One, nil)
 		if err != nil {
 			t.Fatalf("Failed to hash %#v: %s", tc.One, err)
 		}
-		two, err := Hash(tc.Two, testFormat, nil)
+		two, err := Hash(tc.Two, nil)
 		if err != nil {
 			t.Fatalf("Failed to hash %#v: %s", tc.Two, err)
 		}
@@ -466,6 +479,7 @@ func TestHash_equalSet(t *testing.T) {
 }
 
 func TestHash_includable(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		One, Two interface{}
 		Match    bool
@@ -490,11 +504,11 @@ func TestHash_includable(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		one, err := Hash(tc.One, testFormat, nil)
+		one, err := Hash(tc.One, nil)
 		if err != nil {
 			t.Fatalf("Failed to hash %#v: %s", tc.One, err)
 		}
-		two, err := Hash(tc.Two, testFormat, nil)
+		two, err := Hash(tc.Two, nil)
 		if err != nil {
 			t.Fatalf("Failed to hash %#v: %s", tc.Two, err)
 		}
@@ -512,6 +526,7 @@ func TestHash_includable(t *testing.T) {
 }
 
 func TestHash_ignoreZeroValue(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		IgnoreZeroValue bool
 	}{
@@ -541,11 +556,11 @@ func TestHash_ignoreZeroValue(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		hashA, err := Hash(structA, testFormat, &HashOptions{IgnoreZeroValue: tc.IgnoreZeroValue})
+		hashA, err := Hash(structA, &HashOptions{IgnoreZeroValue: tc.IgnoreZeroValue})
 		if err != nil {
 			t.Fatalf("Failed to hash %#v: %s", structA, err)
 		}
-		hashB, err := Hash(structB, testFormat, &HashOptions{IgnoreZeroValue: tc.IgnoreZeroValue})
+		hashB, err := Hash(structB, &HashOptions{IgnoreZeroValue: tc.IgnoreZeroValue})
 		if err != nil {
 			t.Fatalf("Failed to hash %#v: %s", structB, err)
 		}
@@ -556,6 +571,7 @@ func TestHash_ignoreZeroValue(t *testing.T) {
 }
 
 func TestHash_includableMap(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		One, Two interface{}
 		Match    bool
@@ -580,11 +596,11 @@ func TestHash_includableMap(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		one, err := Hash(tc.One, testFormat, nil)
+		one, err := Hash(tc.One, nil)
 		if err != nil {
 			t.Fatalf("Failed to hash %#v: %s", tc.One, err)
 		}
-		two, err := Hash(tc.Two, testFormat, nil)
+		two, err := Hash(tc.Two, nil)
 		if err != nil {
 			t.Fatalf("Failed to hash %#v: %s", tc.Two, err)
 		}
@@ -601,7 +617,34 @@ func TestHash_includableMap(t *testing.T) {
 	}
 }
 
+func TestHash_hashString(t *testing.T) {
+	// check for panic
+	t.Parallel()
+	cases := []struct {
+		name  string
+		value string
+	}{
+		{
+			name:  "simple str",
+			value: "value",
+		}, {
+			name:  "long string",
+			value: strings.Repeat("value ", 1000),
+		}, {
+			name:  "empty",
+			value: "",
+		},
+	}
+	w := walker{h: fnv.New64(), tag: "hash"}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			_ = w.hashString(c.value)
+		})
+	}
+}
+
 func TestHash_hashable(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		One, Two interface{}
 		Match    bool
@@ -642,7 +685,7 @@ func TestHash_hashable(t *testing.T) {
 
 	for i, tc := range cases {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
-			one, err := Hash(tc.One, testFormat, nil)
+			one, err := Hash(tc.One, nil)
 			if tc.Err != "" {
 				if err == nil {
 					t.Fatal("expected error")
@@ -658,7 +701,7 @@ func TestHash_hashable(t *testing.T) {
 				t.Fatalf("Failed to hash %#v: %s", tc.One, err)
 			}
 
-			two, err := Hash(tc.Two, testFormat, nil)
+			two, err := Hash(tc.Two, nil)
 			if err != nil {
 				t.Fatalf("Failed to hash %#v: %s", tc.Two, err)
 			}
@@ -728,4 +771,57 @@ func (t *testHashablePointer) Hash() (uint64, error) {
 	}
 
 	return 100, nil
+}
+
+func Benchmark_hasingSmallStruct(b *testing.B) {
+	type ComplexStruct struct {
+		Name     string
+		Age      uint64
+		Ages     uint
+		Metadata map[string]interface{}
+		Raw      json.RawMessage
+	}
+	v := ComplexStruct{
+		Name: "mitchellh",
+		Age:  64,
+		Metadata: map[string]interface{}{
+			"car":      true,
+			"location": "California",
+			"siblings": []string{"John", "Bob"},
+		},
+		Raw: []byte("nil"),
+	}
+
+	b.Run("bench-slice-set", func(b *testing.B) {
+		opt1 := &HashOptions{
+			SlicesAsSets: true,
+		}
+		for i := 0; i < b.N; i++ {
+			_, _ = Hash(v, opt1)
+		}
+	})
+
+	b.Run("bench-empty-val", func(b *testing.B) {
+		opt2 := &HashOptions{
+			ZeroNil:         true,
+			IgnoreZeroValue: true,
+		}
+		for i := 0; i < b.N; i++ {
+			_, _ = Hash(v, opt2)
+		}
+	})
+	b.Run("bench-stringer", func(b *testing.B) {
+		opt3 := &HashOptions{
+			UseStringer: true,
+		}
+		for i := 0; i < b.N; i++ {
+			_, _ = Hash(v, opt3)
+		}
+	})
+
+	b.Run("bench-default", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			_, _ = Hash(v, nil)
+		}
+	})
 }
