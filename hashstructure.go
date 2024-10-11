@@ -153,7 +153,7 @@ func (w *walker) visit(v reflect.Value, opts visitOpts) (uint64, error) {
 
 	// Binary writing can use raw ints, we have to convert to
 	// a sized-int, we'll choose the largest...
-	switch v.Kind() {
+  switch k:= v.Kind(); k {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		return w.hashValue(v.Int())
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
@@ -174,21 +174,17 @@ func (w *walker) visit(v reflect.Value, opts visitOpts) (uint64, error) {
 		return w.visitMap(v, opts)
 	case reflect.Chan, reflect.Func, reflect.Pointer, reflect.UnsafePointer:
 		return 0, nil
-	}
-
-	switch ty := v.Type(); ty {
-	case timeType:
-		w.h.Reset()
-		b, err := v.Interface().(time.Time).MarshalBinary()
-		if err != nil {
-			return 0, err
-		}
-		err = binary.Write(w.h, binary.LittleEndian, b)
-		return w.h.Sum64(), err
-	}
-
-	switch k := v.Kind(); k {
 	case reflect.Struct:
+		if timeType == v.Type() {
+			w.h.Reset()
+			b, err := v.Interface().(time.Time).MarshalBinary()
+			if err != nil {
+				return 0, err
+			}
+			err = binary.Write(w.h, binary.LittleEndian, b)
+			return w.h.Sum64(), err
+		}
+
 		parent := v.Interface()
 		var include Includable
 		if impl, ok := parent.(Includable); ok {
